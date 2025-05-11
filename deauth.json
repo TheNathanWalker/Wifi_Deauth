@@ -1,0 +1,24 @@
+{
+    "interface": "wlan0",
+    "deauth_duration": 60,
+    "debug": true,
+    "log_file": "deauth.log",
+    "verify_timeout": 5,
+    "max_retries": 3,
+    "targets": [
+        {
+            "ssid": "target-ssid-1",
+            "bssid": "ee:ee:ee:ee:ee:ee",
+            "channels": [
+                8, 20
+            ]
+        },
+        {
+            "ssid": "target-ssid-2",
+            "bssid": "ff:ff:ff:ff:ff:ff",
+            "channels": [
+                149
+            ]
+        }
+    ]
+}
