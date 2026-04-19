@@ -133,8 +133,11 @@ def main():
             # Monitor for clients before deauth
             clients = monitor_clients(interface, target['ssid'], target['bssid'], active_channels, monitor_duration)
 
-            # Proceed with deauth
-            deauth_clients(interface, target['bssid'], config['deauth_duration'], active_channels)
+            # Only proceed with deauth if clients were detected
+            if clients:
+                deauth_clients(interface, target['bssid'], config['deauth_duration'], active_channels)
+            else:
+                logging.info(f"No clients detected for {target['ssid']} ({target['bssid']}), skipping deauthentication")
         else:
             logging.warning(f"{target['ssid']} ({target['bssid']}) is not active on any specified channel")
 
