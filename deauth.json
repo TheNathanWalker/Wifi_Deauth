@@ -1,6 +1,7 @@
 {
     "interface": "wlan0",
     "deauth_duration": 60,
+    "monitor_duration": 30,
     "debug": true,
     "log_file": "deauth.log",
     "verify_timeout": 5,
